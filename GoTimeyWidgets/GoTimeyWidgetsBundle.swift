@@ -11,8 +11,6 @@ import SwiftUI
 @main
 struct GoTimeyWidgetsBundle: WidgetBundle {
     var body: some Widget {
-        GoTimeyWidgets()
-        GoTimeyWidgetsControl()
-        GoTimeyWidgetsLiveActivity()
+        DepartureActivityWidget()
     }
 }

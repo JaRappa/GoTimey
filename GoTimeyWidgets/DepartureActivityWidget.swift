@@ -121,7 +121,7 @@ struct DepartureCompactTrailing: View {
         let mins = Int(context.state.idealLeaveDate.timeIntervalSince(Date()) / 60)
         Text(mins > 0 ? "in \(mins)m" : "Now!")
             .font(.caption.bold())
-            .foregroundStyle(mins > 5 ? .primary : .red)
+            .foregroundStyle(mins > 5 ? Color.primary : Color.red)
     }
 }
 
@@ -143,14 +143,17 @@ struct DepartureExpandedView: View {
 
 // MARK: - Widget Configuration
 
+// MARK: - Widget Configuration
+
 struct DepartureActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: DepartureAttributes.self) { context in
-            // Lock Screen / Banner
             DepartureLockScreenView(context: context)
         } dynamicIsland: { context in
-            DynamicIsland {
-                // Expanded
+            let mins = Int(context.state.idealLeaveDate.timeIntervalSince(Date()) / 60)
+            let urgencyColor: Color = mins > 5 ? .primary : .red
+
+            return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     HStack {
                         Image(systemName: context.attributes.transportIcon)
@@ -160,10 +163,9 @@ struct DepartureActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    let mins = Int(context.state.idealLeaveDate.timeIntervalSince(Date()) / 60)
                     Text(mins > 0 ? "in \(mins) min" : "Leave now!")
                         .font(.caption.bold())
-                        .foregroundStyle(mins > 5 ? .primary : .red)
+                        .foregroundStyle(urgencyColor)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     DepartureLockScreenView(context: context)

@@ -10,7 +10,7 @@ import EventKit
 
 // MARK: - CalendarEvent (app model)
 
-struct CalendarEvent: Identifiable {
+struct CalendarEvent: Identifiable, Equatable {
     let id: String
     let title: String
     let startDate: Date
