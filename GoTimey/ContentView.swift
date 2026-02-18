@@ -6,12 +6,16 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 struct ContentView: View {
 
     @State private var preferences = UserPreferences()
     @State private var eventStore  = CalendarEventStore()
     @State private var showSettings = false
+
+    // Refreshes the event list every minute so started events drop off automatically
+    private let refreshTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     var body: some View {
         NavigationStack {
@@ -38,16 +42,28 @@ struct ContentView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
                         guard let event = eventStore.upcomingEvents.first else { return }
-                        Task {
-                            await DepartureActivityManager.shared.startActivity(
-                                for: event,
-                                transportMode: preferences.transportMode,
-                                preferences: preferences
-                            )
-                        }
+                        // Schedule a real notification 5 seconds out so you can background
+                        // the app — the notification fires and starts the Live Activity
+                        // exactly as the production flow does.
+                        let content = UNMutableNotificationContent()
+                        content.title = "GoTimey Test"
+                        content.body  = "Starting Live Activity for \(event.title)"
+                        content.sound = .default
+                        content.userInfo = [
+                            "eventID":       event.id,
+                            "transportMode": preferences.transportMode.rawValue
+                        ]
+                        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+                        let request = UNNotificationRequest(
+                            identifier: "debug-test",
+                            content: content,
+                            trigger: trigger
+                        )
+                        UNUserNotificationCenter.current().add(request)
                     } label: {
-                        Label("Test Live Activity", systemImage: "dot.radiowaves.left.and.right")
+                        Label("Test", systemImage: "dot.radiowaves.left.and.right")
                     }
+                    .disabled(eventStore.upcomingEvents.isEmpty)
                 }
                 #endif
             }
@@ -56,6 +72,9 @@ struct ContentView: View {
             }
             .task {
                 await eventStore.load(preferences: preferences)
+            }
+            .onReceive(refreshTimer) { _ in
+                Task { await eventStore.load(preferences: preferences) }
             }
             // Reload whenever the sheet is dismissed (user may have changed calendars)
             .onChange(of: showSettings) { _, isShowing in

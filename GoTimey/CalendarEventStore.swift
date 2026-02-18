@@ -34,26 +34,31 @@ final class CalendarEventStore {
     func load(preferences: UserPreferences) async {
         await MainActor.run { isLoading = true }
 
-        let now   = Date()
-        let end   = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
+        let now        = Date()
+        let cutoff     = now.addingTimeInterval(-5 * 60)  // 5 min grace period
+        let end        = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
 
-        let predicate = store.predicateForEvents(withStart: now, end: end, calendars: nil)
-        let rawEvents = store.events(matching: predicate)
+        let predicate  = store.predicateForEvents(withStart: cutoff, end: end, calendars: nil)
+        let rawEvents  = store.events(matching: predicate)
 
-        // Filter to only the user's selected calendars
+        // Filter to only the user's selected calendars,
+        // and drop any event whose start time was more than 5 minutes ago.
         let selectedIDs = preferences.selectedCalendarIDs
-        let filtered = rawEvents.filter { selectedIDs.contains($0.calendar.calendarIdentifier) }
+        let filtered = rawEvents.filter {
+            selectedIDs.contains($0.calendar.calendarIdentifier) &&
+            $0.startDate >= cutoff
+        }
 
         let mapped: [CalendarEvent] = filtered.map { ek in
             CalendarEvent(
-                id:             ek.eventIdentifier,
-                title:          ek.title ?? "Untitled Event",
-                startDate:      ek.startDate,
-                endDate:        ek.endDate,
-                location:       ek.location.flatMap { $0.isEmpty ? nil : $0 },
-                calendarColor:  ek.calendar.cgColor,
-                calendarTitle:  ek.calendar.title,
-                isAllDay:       ek.isAllDay
+                id:            ek.eventIdentifier,
+                title:         ek.title ?? "Untitled Event",
+                startDate:     ek.startDate,
+                endDate:       ek.endDate,
+                location:      ek.location.flatMap { $0.isEmpty ? nil : $0 },
+                calendarColor: ek.calendar.cgColor,
+                calendarTitle: ek.calendar.title,
+                isAllDay:      ek.isAllDay
             )
         }
 

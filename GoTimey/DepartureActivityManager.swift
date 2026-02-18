@@ -8,6 +8,7 @@
 import ActivityKit
 import CoreLocation
 import MapKit
+import UserNotifications
 import Foundation
 
 @Observable
@@ -68,23 +69,26 @@ final class DepartureActivityManager {
             currentActivity = activity
 
             // Start a background loop that refreshes travel time every 5 minutes
-            scheduleUpdates(for: event, mode: transportMode)
-        } catch {
+            scheduleUpdates(for: event, mode: transportMode)        } catch {
             print("GoTimey: Failed to start Live Activity — \(error)")
         }
     }
 
     // MARK: - Update
 
-    private func scheduleUpdates(for event: CalendarEvent, mode: TransportMode) {
+    private func scheduleUpdates(for event: CalendarEvent, mode: TransportMode, startingAt startDate: Date = Date()) {
         updateTask?.cancel()
         updateTask = Task {
+            // Wait until the alert time before beginning live updates
+            let delay = startDate.timeIntervalSince(Date())
+            if delay > 0 {
+                try? await Task.sleep(for: .seconds(delay))
+            }
+
             while !Task.isCancelled {
-                // Refresh every 5 minutes or when the event is imminent
                 try? await Task.sleep(for: .seconds(5 * 60))
                 guard !Task.isCancelled else { break }
 
-                // Stop updating once the event has started
                 if Date() >= event.startDate {
                     await endCurrentActivity()
                     break
@@ -130,23 +134,80 @@ final class DepartureActivityManager {
 
     // MARK: - Scheduling helper
 
-    /// Called by CalendarEventStore/NotificationScheduler to start activities
-    /// at the right time based on the user's lead time preference.
+    /// Starts the Live Activity immediately but schedules the alert
+    /// (banner + sound) to appear at the right time via alertConfiguration.
+    /// This way the activity is registered with the system immediately
+    /// and doesn't require the app to be running when it's time to notify.
     func scheduleActivityStart(
         for event: CalendarEvent,
         transportMode: TransportMode,
         preferences: UserPreferences
     ) {
-        let leadTime = TimeInterval(preferences.notificationLeadTime * 60)
-        let triggerDate = event.startDate.addingTimeInterval(-leadTime)
-        let delay = triggerDate.timeIntervalSince(Date())
-
-        guard delay > 0 else { return }
+        guard let location = event.location else { return }
 
         Task {
-            try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled else { return }
-            await startActivity(for: event, transportMode: transportMode, preferences: preferences)
+            guard let (travelSeconds, _) = await fetchTravelTime(to: location, mode: transportMode) else { return }
+
+            let buffer   = max(travelSeconds * 0.10, 5 * 60)
+            let lastLeave = event.startDate.addingTimeInterval(-(travelSeconds - buffer))
+            let leadTime  = TimeInterval(preferences.notificationLeadTime * 60)
+            let alertDate = lastLeave.addingTimeInterval(-leadTime)
+
+            // Only schedule if the alert time is in the future
+            guard alertDate > Date() else { return }
+
+            let idealLeave = event.startDate.addingTimeInterval(-travelSeconds)
+
+            let attributes = DepartureAttributes(
+                eventTitle:     event.title,
+                eventLocation:  location,
+                transportIcon:  transportMode.icon
+            )
+
+            let state = DepartureAttributes.ContentState(
+                idealLeaveDate: idealLeave,
+                lastLeaveDate:  lastLeave,
+                eventStartDate: event.startDate,
+                travelDuration: formatDuration(travelSeconds)
+            )
+
+            let alertConfig = AlertConfiguration(
+                title: "Time to leave for \(event.title)",
+                body:  "Leave by \(lastLeave.formatted(date: .omitted, time: .shortened)) — \(formatDuration(travelSeconds)) away.",
+                sound: .default
+            )
+
+            // AlertConfiguration makes the Live Activity banner appear and play
+            // a sound when update is called — even if the app is not running.
+
+            do {
+                // End any previous activity for this event first
+                await endCurrentActivity()
+
+                let activity = try Activity.request(
+                    attributes: attributes,
+                    content: .init(state: state, staleDate: alertDate.addingTimeInterval(5 * 60)),
+                    pushType: nil
+                )
+                currentActivity = activity
+
+                // Update with the alert — this triggers the banner + sound
+                // at delivery time even if the app is not running.
+                let alertContent = ActivityContent(
+                    state: state,
+                    staleDate: alertDate.addingTimeInterval(5 * 60),
+                    relevanceScore: 100
+                )
+                await activity.update(alertContent, alertConfiguration: alertConfig)
+
+                print("GoTimey: Live Activity scheduled, alert at \(alertDate)")
+
+                // Begin live travel time updates starting from alertDate
+                scheduleUpdates(for: event, mode: transportMode, startingAt: alertDate)
+
+            } catch {
+                print("GoTimey: Failed to schedule Live Activity — \(error)")
+            }
         }
     }
 
