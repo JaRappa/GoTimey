@@ -397,6 +397,11 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "\"GoTimey reads your calendar events so it knows when and where you need to be.\"";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "\"GoTimey uses your location to calculate real-time travel time to your events.\"";
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "\"GoTimey uses your location to calculate real-time travel time to your events.\"";
+				INFOPLIST_KEY_NSLocationUsageDescription = "\"GoTimey uses your location to calculate real-time travel time to your events.\"";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "\"GoTimey uses your location to calculate real-time travel time to your events.\"";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -424,6 +429,11 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "\"GoTimey reads your calendar events so it knows when and where you need to be.\"";
+				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "\"GoTimey uses your location to calculate real-time travel time to your events.\"";
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "\"GoTimey uses your location to calculate real-time travel time to your events.\"";
+				INFOPLIST_KEY_NSLocationUsageDescription = "\"GoTimey uses your location to calculate real-time travel time to your events.\"";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "\"GoTimey uses your location to calculate real-time travel time to your events.\"";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

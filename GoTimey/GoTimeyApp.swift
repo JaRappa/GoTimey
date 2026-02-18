@@ -9,9 +9,18 @@ import SwiftUI
 
 @main
 struct GoTimeyApp: App {
+
+    // Mirrors the same UserDefaults key OnboardingManager writes to.
+    // When onboarding completes, SwiftUI automatically swaps in ContentView.
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if hasCompletedOnboarding {
+                ContentView()
+            } else {
+                OnboardingView()
+            }
         }
     }
 }

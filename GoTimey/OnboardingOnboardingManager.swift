@@ -11,7 +11,7 @@ import EventKit
 import UserNotifications
 
 @Observable
-final class OnboardingManager {
+final class OnboardingManager: NSObject, CLLocationManagerDelegate {
 
     // Persists whether the user has completed onboarding.
     var hasCompletedOnboarding: Bool {
@@ -37,15 +37,28 @@ final class OnboardingManager {
     private let locationManager = CLLocationManager()
     private let eventStore      = EKEventStore()
 
+    override init() {
+        super.init()
+        // Assign delegate immediately so status callbacks are received.
+        locationManager.delegate = self
+    }
+
+    // MARK: - CLLocationManagerDelegate
+
+    // Called whenever the user responds to the location prompt,
+    // or when the app returns from Settings.
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        Task { @MainActor in
+            self.locationStatus = status
+        }
+    }
+
     // MARK: - Request Permissions
 
     func requestLocationPermission() {
+        // The delegate callback above will update locationStatus reliably.
         locationManager.requestWhenInUseAuthorization()
-        // Poll after a short delay so the UI reflects any immediate resolution.
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(0.5))
-            locationStatus = locationManager.authorizationStatus
-        }
     }
 
     func requestCalendarPermission() async {
@@ -76,9 +89,7 @@ final class OnboardingManager {
 
     func refreshStatuses() async {
         locationStatus = locationManager.authorizationStatus
-
         calendarStatus = EKEventStore.authorizationStatus(for: .event)
-
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         await MainActor.run { notificationStatus = settings.authorizationStatus }
     }
