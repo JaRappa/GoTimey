@@ -15,27 +15,45 @@ struct OnboardingView: View {
     @State private var currentPage: Int = 0
 
     var body: some View {
-        TabView(selection: $currentPage) {
-            WelcomePage(onContinue: { currentPage = 1 })
-                .tag(0)
-
-            PermissionsPage(manager: manager, onContinue: { currentPage = 2 })
-                .tag(1)
-
-            CalendarPickerPage(preferences: preferences, onContinue: { currentPage = 3 })
-                .tag(2)
-
-            TransportModePage(preferences: preferences, onContinue: { currentPage = 4 })
-            .tag(3)
-
-            LeadTimePage(preferences: preferences, onContinue: {
-                manager.hasCompletedOnboarding = true
-            })
-            .tag(4)
+        // Using a switch instead of TabView so each page is only
+        // instantiated (and its .task fired) when it becomes active.
+        // This prevents CalendarPickerPage from loading before permission is granted.
+        ZStack {
+            switch currentPage {
+            case 0:
+                WelcomePage(onContinue: { advance() })
+                    .transition(pageTransition)
+            case 1:
+                PermissionsPage(manager: manager, onContinue: { advance() })
+                    .transition(pageTransition)
+            case 2:
+                CalendarPickerPage(eventStore: manager.eventStore, preferences: preferences, onContinue: { advance() })
+                    .transition(pageTransition)
+            case 3:
+                TransportModePage(preferences: preferences, onContinue: { advance() })
+                    .transition(pageTransition)
+            case 4:
+                LeadTimePage(preferences: preferences, onContinue: {
+                    manager.hasCompletedOnboarding = true
+                })
+                .transition(pageTransition)
+            default:
+                EmptyView()
+            }
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
         .animation(.easeInOut, value: currentPage)
         .task { await manager.refreshStatuses() }
+    }
+
+    private func advance() {
+        currentPage += 1
+    }
+
+    private var pageTransition: AnyTransition {
+        .asymmetric(
+            insertion: .move(edge: .trailing),
+            removal: .move(edge: .leading)
+        )
     }
 }
 
@@ -275,13 +293,13 @@ private struct PermissionsPage: View {
 
 private struct CalendarPickerPage: View {
 
+    let eventStore: EKEventStore
     @Bindable var preferences: UserPreferences
     let onContinue: () -> Void
 
     @State private var availableCalendars: [EKCalendar] = []
     // Local selection state — flushed to UserPreferences on Continue
     @State private var selectedIDs: Set<String> = []
-    private let eventStore = EKEventStore()
 
     var body: some View {
         VStack(spacing: 0) {

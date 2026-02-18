@@ -35,7 +35,7 @@ final class OnboardingManager: NSObject, CLLocationManagerDelegate {
     // MARK: - Private helpers
 
     private let locationManager = CLLocationManager()
-    private let eventStore      = EKEventStore()
+    let eventStore              = EKEventStore()
 
     override init() {
         super.init()
