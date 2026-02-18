@@ -70,4 +70,15 @@ final class UserPreferences {
             UserDefaults.standard.set(newValue.rawValue, forKey: "transportMode")
         }
     }
+
+    // Minutes before departure to start the live notification. Default: 30.
+    var notificationLeadTime: Int {
+        get {
+            let stored = UserDefaults.standard.integer(forKey: "notificationLeadTime")
+            return stored == 0 ? 30 : stored
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "notificationLeadTime")
+        }
+    }
 }

@@ -6,10 +6,12 @@
 //
 
 import SwiftUI
+import EventKit
 
 struct OnboardingView: View {
 
     @State private var manager = OnboardingManager()
+    @State private var preferences = UserPreferences()
     @State private var currentPage: Int = 0
 
     var body: some View {
@@ -17,10 +19,19 @@ struct OnboardingView: View {
             WelcomePage(onContinue: { currentPage = 1 })
                 .tag(0)
 
-            PermissionsPage(manager: manager, onContinue: {
+            PermissionsPage(manager: manager, onContinue: { currentPage = 2 })
+                .tag(1)
+
+            CalendarPickerPage(preferences: preferences, onContinue: { currentPage = 3 })
+                .tag(2)
+
+            TransportModePage(preferences: preferences, onContinue: { currentPage = 4 })
+            .tag(3)
+
+            LeadTimePage(preferences: preferences, onContinue: {
                 manager.hasCompletedOnboarding = true
             })
-            .tag(1)
+            .tag(4)
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .animation(.easeInOut, value: currentPage)
@@ -257,6 +268,347 @@ private struct PermissionsPage: View {
         case .denied:                   return .red
         default:                         return .secondary
         }
+    }
+}
+
+// MARK: - Page 3: Calendar Picker
+
+private struct CalendarPickerPage: View {
+
+    @Bindable var preferences: UserPreferences
+    let onContinue: () -> Void
+
+    @State private var availableCalendars: [EKCalendar] = []
+    // Local selection state — flushed to UserPreferences on Continue
+    @State private var selectedIDs: Set<String> = []
+    private let eventStore = EKEventStore()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            Text("Choose Calendars")
+                .font(.largeTitle.bold())
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 12)
+
+            Text("Select which calendars GoTimey should watch for upcoming events.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+                .padding(.bottom, 32)
+
+            if availableCalendars.isEmpty {
+                ContentUnavailableView(
+                    "No Calendars Found",
+                    systemImage: "calendar.badge.exclamationmark",
+                    description: Text("Make sure calendar access was granted on the previous screen.")
+                )
+            } else {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        ForEach(availableCalendars, id: \.calendarIdentifier) { calendar in
+                            CalendarRow(
+                                calendar: calendar,
+                                isSelected: selectedIDs.contains(calendar.calendarIdentifier),
+                                onToggle: {
+                                    if selectedIDs.contains(calendar.calendarIdentifier) {
+                                        selectedIDs.remove(calendar.calendarIdentifier)
+                                    } else {
+                                        selectedIDs.insert(calendar.calendarIdentifier)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                }
+            }
+
+            Spacer()
+
+            Button {
+                // Flush local selection into persistent preferences, then advance
+                preferences.selectedCalendarIDs = selectedIDs
+                onContinue()
+            } label: {
+                Text("Continue")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(canContinue ? Color.accentColor : Color.secondary.opacity(0.3))
+                    .foregroundStyle(canContinue ? .white : .secondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .animation(.default, value: canContinue)
+            }
+            .disabled(!canContinue)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 48)
+        }
+        .task {
+            availableCalendars = eventStore.calendars(for: .event)
+            // Pre-populate with any previously saved selection
+            selectedIDs = preferences.selectedCalendarIDs
+        }
+    }
+
+    private var canContinue: Bool { !selectedIDs.isEmpty }
+}
+
+// MARK: - Page 5: Notification Lead Time
+
+private struct LeadTimePage: View {
+
+    @Bindable var preferences: UserPreferences
+    let onContinue: () -> Void
+
+    // Wheel selection in minutes — local state flushed on Continue
+    @State private var selectedMinutes: Int = 30
+
+    // 1 min increments from 1–180 (1 to 3 hours)
+    private let minuteOptions = Array(1...180)
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            ZStack {
+                Circle()
+                    .fill(.tint.opacity(0.15))
+                    .frame(width: 100, height: 100)
+                Image(systemName: "bell.and.waves.left.and.right.fill")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.tint)
+            }
+            .padding(.bottom, 28)
+
+            Text("Heads-Up Time")
+                .font(.largeTitle.bold())
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 12)
+
+            Text("How long before you need to leave should GoTimey start your live departure notification?")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+                .padding(.bottom, 8)
+
+            Spacer()
+
+            // Summary label above the wheel
+            Text(summaryText)
+                .font(.title2.bold())
+                .foregroundStyle(.tint)
+                .contentTransition(.numericText())
+                .animation(.default, value: selectedMinutes)
+                .padding(.bottom, 8)
+
+            // Wheel picker
+            Picker("Lead time", selection: $selectedMinutes) {
+                ForEach(minuteOptions, id: \.self) { minutes in
+                    Text(labelFor(minutes: minutes))
+                        .tag(minutes)
+                }
+            }
+            .pickerStyle(.wheel)
+            .frame(height: 180)
+            .padding(.horizontal, 24)
+
+            Text("Default is 30 minutes. You can always change this in Settings.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+                .padding(.top, 8)
+
+            Spacer()
+
+            Button {
+                preferences.notificationLeadTime = selectedMinutes
+                onContinue()
+            } label: {
+                Text("Let's Go!")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(.tint)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 48)
+        }
+        .onAppear {
+            selectedMinutes = preferences.notificationLeadTime
+        }
+    }
+
+    private var summaryText: String {
+        if selectedMinutes < 60 {
+            return "\(selectedMinutes) min before leaving"
+        } else if selectedMinutes == 60 {
+            return "1 hour before leaving"
+        } else if selectedMinutes % 60 == 0 {
+            return "\(selectedMinutes / 60) hours before leaving"
+        } else {
+            let h = selectedMinutes / 60
+            let m = selectedMinutes % 60
+            return "\(h) hr \(m) min before leaving"
+        }
+    }
+
+    private func labelFor(minutes: Int) -> String {
+        if minutes < 60 {
+            return "\(minutes) min"
+        } else if minutes == 60 {
+            return "1 hr"
+        } else if minutes % 60 == 0 {
+            return "\(minutes / 60) hr"
+        } else {
+            return "\(minutes / 60) hr \(minutes % 60) min"
+        }
+    }
+}
+
+// MARK: - Calendar Row
+
+private struct CalendarRow: View {
+    let calendar: EKCalendar
+    let isSelected: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 14) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(cgColor: calendar.cgColor))
+                    .frame(width: 14, height: 14)
+
+                Text(calendar.title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+            }
+            .padding()
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Page 4: Transport Mode
+
+private struct TransportModePage: View {
+
+    @Bindable var preferences: UserPreferences
+    let onContinue: () -> Void
+
+    // Local selection state — flushed to UserPreferences on Continue
+    @State private var selectedMode: TransportMode = .car
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            Text("How Do You Get Around?")
+                .font(.largeTitle.bold())
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 12)
+
+            Text("GoTimey will use this to calculate how long it'll take you to reach your events.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+                .padding(.bottom, 32)
+
+            VStack(spacing: 12) {
+                ForEach(TransportMode.allCases) { mode in
+                    TransportModeCard(
+                        mode: mode,
+                        isSelected: selectedMode == mode,
+                        onSelect: { selectedMode = mode }
+                    )
+                }
+            }
+            .padding(.horizontal, 24)
+
+            Spacer()
+
+            Button {
+                // Flush local selection into persistent preferences, then advance
+                preferences.transportMode = selectedMode
+                onContinue()
+            } label: {
+                Text("Let's Go!")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(.tint)
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 48)
+        }
+        .onAppear {
+            // Pre-populate with any previously saved preference
+            selectedMode = preferences.transportMode
+        }
+    }
+}
+
+private struct TransportModeCard: View {
+    let mode: TransportMode
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 16) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.15))
+                        .frame(width: 48, height: 48)
+                    Image(systemName: mode.icon)
+                        .font(.title3)
+                        .foregroundStyle(isSelected ? .white : .secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mode.label)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text(mode.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.regularMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .animation(.default, value: isSelected)
     }
 }
 
